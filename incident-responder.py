@@ -20,6 +20,36 @@ cursor.execute("""CREATE TABLE IF NOT EXISTS results
     response_time REAL,
     error TEXT)""")
 
+#create incident table
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS incidents (
+    date TEXT,
+    service_name TEXT,
+    incident_type TEXT,
+    details TEXT
+)
+""")
+#checks for incidents and logs them
+def check_for_incident(service_name, threshold=3):
+    cursor.execute("""
+        SELECT status
+        FROM results
+        WHERE service_name = ?
+        ORDER BY date DESC
+        LIMIT ?
+    """, (service_name, threshold))
+
+    recent_checks = cursor.fetchall()
+
+    if len(recent_checks) < threshold:
+        return False
+
+    for (status,) in recent_checks:
+        if status is not None and 200 <= status < 300:
+            return False
+
+    return True
+
 success_count = 0
 
 #loops the check
@@ -68,6 +98,22 @@ for service_name, url in urls:
             )
         )
         print("failure saved to database.")
+
+    if check_for_incident(service_name, threshold=3):
+        incident_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        incident_details = f"{service_name} failed 3 checks in a row."
+
+        print("INCIDENT DETECTED:", incident_details)
+
+        cursor.execute(
+            "INSERT INTO incidents VALUES (?, ?, ?, ?)",
+            (
+                incident_time,
+                service_name,
+                "Consecutive Failures",
+                incident_details
+            )
+        )
     
     time.sleep(5)
 
