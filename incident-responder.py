@@ -3,10 +3,54 @@ import time
 from datetime import datetime
 import requests
 
-urls = [
-    ("GitHub", "https://api.github.com"), #pairs, (service_name, url)
-    #can add more urls later
-]
+api_dict = {
+    "GitHub": {
+        "url": "https://api.github.com",
+        "expected_status": [200],
+        "timeout": 3,
+        "check_interval": 5,
+        "alert_threshold": 3,
+        "headers": {"Accept": "application/json"},
+        "retry_count": 2
+    },
+    "httpBin": {
+        "url": "https://httpbin.org/get",
+        "expected_status": [200],
+        "timeout": 3,
+        "check_interval": 5,
+        "alert_threshold": 3,
+        "headers": {"Accept": "application/json"},
+        "retry_count": 2
+    },
+    "CatFacts": {
+        "url": "https://catfact.ninja/fact",
+        "expected_status": [200],
+        "timeout": 3,
+        "check_interval": 5,
+        "alert_threshold": 3,
+        "headers": {"Accept": "application/json"},
+        "retry_count": 2
+    },
+    "ipAddress": {
+        "url": "https://api.ipify.org",
+        "expected_status": [200],
+        "timeout": 3,
+        "check_interval": 5,
+        "alert_threshold": 3,
+        "headers": {"Accept": "application/json"},
+        "retry_count": 2
+    },
+    "DetroitTime": {
+        "url": "https://worldtimeapi.org/api/timezone/America/Detroit",
+        "expected_status": [200],
+        "timeout": 3,
+        "check_interval": 5,
+        "alert_threshold": 3,
+        "headers": {"Accept": "application/json"},
+        "retry_count": 2
+    }
+    
+}
 
 con = sqlite3.connect("log.db")
 cursor = con.cursor()
@@ -30,7 +74,7 @@ CREATE TABLE IF NOT EXISTS incidents (
 )
 """)
 #checks for incidents and logs them
-def check_for_incident(service_name, threshold=3):
+def check_for_incident(service_name, expected_status, threshold=3):
     cursor.execute("""
         SELECT status
         FROM results
@@ -45,7 +89,7 @@ def check_for_incident(service_name, threshold=3):
         return False
 
     for (status,) in recent_checks:
-        if status is not None and 200 <= status < 300:
+        if status is not None and status in expected_status:
             return False
 
     return True
@@ -53,18 +97,29 @@ def check_for_incident(service_name, threshold=3):
 success_count = 0
 
 #loops the check
-for service_name, url in urls:
-    try:
-        # We added timeout=3 so it gives up after 3 seconds
-        response = requests.get(url, timeout=3)
+for service_name, config in api_dict.items():
+    url = config["url"]
+    timeout = config["timeout"]
+    expected_status = config["expected_status"]
+    retry_count = config["retry_count"]
+    headers = config["headers"]
+ 
+    response = None
+    last_error = None
+ 
+    for attempt in range(retry_count):
+        try:
+            response = requests.get(url, timeout=timeout, headers=headers)
+            break  # success — stop retrying
+        except requests.exceptions.RequestException as e:
+            last_error = e
+            print(f"Attempt {attempt + 1} failed for {service_name}: {e}")
+ 
+    if response is not None:
         response_time = response.elapsed.total_seconds()
-
-
-        print("Status Code:", response.status_code)
-        print("Response Time (seconds):", response.elapsed.total_seconds())
-            
-            
-            #saves successful request data into database
+ 
+        print(f"[{service_name}] Status: {response.status_code} | Response time: {response_time:.3f}s")
+ 
         cursor.execute(
             "INSERT INTO results VALUES (?, ?, ?, ?, ?, ?)",
             (
@@ -77,15 +132,15 @@ for service_name, url in urls:
             )
         )
 
-        success_count += 1
-        print("saved to database")
+        if response.status_code in expected_status:
+            success_count += 1
 
-    except requests.exceptions.RequestException as e:
-        # If the network fails or times out, it runs this instead of crashing
-        print("Alert: The network crashed or timed out")
-        print("Error Details:", e)
+        print(f"[{service_name}] Saved to database.")
 
-        #saves failed request data and error msg into database
+    else:
+        print(f"[{service_name}] All {retry_count} attempts failed.")
+        print(f"[{service_name}] Last error: {last_error}")
+
         cursor.execute(
             "INSERT INTO results VALUES (?, ?, ?, ?, ?, ?)",
             (
@@ -94,16 +149,16 @@ for service_name, url in urls:
                 url,
                 None,
                 None,
-                str(e)
+                str(last_error)
             )
         )
-        print("failure saved to database.")
+        print(f"[{service_name}] Failure saved to database.")
 
-    if check_for_incident(service_name, threshold=3):
+    if check_for_incident(service_name, expected_status, threshold=config["alert_threshold"]):
         incident_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        incident_details = f"{service_name} failed 3 checks in a row."
+        incident_details = f"{service_name} failed {config['alert_threshold']} checks in a row."
 
-        print("INCIDENT DETECTED:", incident_details)
+        print(f"INCIDENT DETECTED: {incident_details}")
 
         cursor.execute(
             "INSERT INTO incidents VALUES (?, ?, ?, ?)",
@@ -114,12 +169,9 @@ for service_name, url in urls:
                 incident_details
             )
         )
-    
-    time.sleep(5)
-
-   
+    time.sleep(config["check_interval"])
 
 con.commit()
 con.close()
-
-print("Successful checks:", success_count, "/", len(urls))
+ 
+print(f"\nSuccessful checks: {success_count} / {len(api_dict)}")
