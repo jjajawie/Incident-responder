@@ -5,4 +5,4 @@ A Python-based monitoring tool that pings web services and logs their uptime and
 ## Team Members
 * Amadou
 * Joseph
-* ykamal310
+* Youssef Kamal
