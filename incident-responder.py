@@ -86,7 +86,7 @@ CREATE TABLE IF NOT EXISTS incidents (
     details TEXT
 )
 """)
-#checks for incidents and logs them
+#checks recent results for one service returns true if threshold is met
 def check_for_incident(cursor, service_name, expected_status, threshold=3):
     cursor.execute("""
         SELECT status
@@ -109,6 +109,7 @@ def check_for_incident(cursor, service_name, expected_status, threshold=3):
 
 success_count = 0
 
+#runs one full monitoring cycle checks apis and sends to database
 def run_checks(log_func=print):
     global checking
 
@@ -244,6 +245,7 @@ def run_checks(log_func=print):
     con.close()
     log_func(f"\nSuccessful checks: {success_count} / {len(api_dict)}")
 
+#starts continuous monitoring loop, repeats every interval seconds
 def start_monitoring(interval=5, log_func=print):
     global checking
 
@@ -261,11 +263,12 @@ def start_monitoring(interval=5, log_func=print):
 
     log_func("Monitoring stopped.")
 
-
+#stops monitoring loop by changing global check
 def stop_monitoring():
     global checking
     checking = False
 
+#changes demo api state manually to simulate a api thats up or down
 def set_demo_api_status(is_up):
     global demo_api
     demo_api = is_up
