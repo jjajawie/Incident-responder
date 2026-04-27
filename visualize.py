@@ -13,6 +13,7 @@ spec = importlib.util.spec_from_file_location("incident_responder", "incident-re
 incident_responder = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(incident_responder)
 
+#reads recent incidents from database and prints them in gui log
 def show_incidents():
     con = sqlite3.connect("log.db")
     cursor = con.cursor()
@@ -39,6 +40,7 @@ def show_incidents():
         gui_log(f"Type: {incident_type}")
         gui_log(f"Details: {details}")
 
+#calculates uptime summary for each service using database 
 def show_uptime_summary():
     con = sqlite3.connect("log.db")
     cursor = con.cursor()
@@ -78,17 +80,18 @@ def show_uptime_summary():
         gui_log(f"Average response time: {avg_response:.3f}s")
         gui_log(f"Incidents: {incidents}")
 
+#writes messages into gui log box 
 def gui_log(message):
     log_box.config(state="normal")
     log_box.insert(tk.END, str(message) + "\n")
     log_box.see(tk.END)
     log_box.config(state="disabled")
 
-
+#passes log updates safely into tkinter main thread
 def safe_log(message):
     root.after(0, lambda: gui_log(message))
 
-
+#starts monitoring thread using interval entered in gui
 def start_checks():
     try:
         interval = int(interval_entry.get())
@@ -110,7 +113,7 @@ def start_checks():
     )
     thread.start()
 
-
+#stops monitoring thread and reenables start button
 def stop_checks():
     incident_responder.stop_monitoring()
 
@@ -119,11 +122,12 @@ def stop_checks():
 
     gui_log("Stop check")
 
+#clears previous graph before drawing new visualization
 def clear_chart():
     for widget in chart_frame.winfo_children():
         widget.destroy()
 
-
+#builds heatmap showing daily uptime percentage for all services
 def show_heatmap():
     clear_chart()
 
@@ -197,6 +201,7 @@ def show_heatmap():
     canvas.draw()
     canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
+#shows uptime graph for selected api using grouped time data
 def show_selected_service_graph():
     clear_chart()
 
@@ -247,6 +252,7 @@ def show_selected_service_graph():
     canvas.draw()
     canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
+#shows overall uptime graph for all api
 def show_uptime_graph():
     clear_chart()
 
@@ -297,11 +303,12 @@ def show_uptime_graph():
     canvas.draw()
     canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
+#sets demo api to up state
 def set_demo_up():
     incident_responder.set_demo_api_status(True)
     gui_log("DemoAPI UP.")
 
-
+#sets demo api to down state
 def set_demo_down():
     incident_responder.set_demo_api_status(False)
     gui_log("DemoAPI DOWN.")
